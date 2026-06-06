@@ -105,9 +105,6 @@ free-tier Synapse node can lag and hand out expired blockhashes, so **transactio
 `TX_RPC_URL` (defaults to a synced public RPC). Set `TX_RPC_URL` to a reliable endpoint (e.g. a free
 Helius key) for best results.
 
-See [`SUBMISSION.md`](./SUBMISSION.md) for the full go-live runbook + X-post draft, and
-[`DEMO_SCRIPT.md`](./DEMO_SCRIPT.md) for the demo walkthrough.
-
 ---
 
 ## Bounty requirement mapping (Category 2)
