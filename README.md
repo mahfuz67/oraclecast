@@ -1,206 +1,207 @@
 # OracleCast 🛰️
 
-**An autonomous, two-sided, self-funding on-chain agent for the OOBE Protocol × Ace Data Cloud bounty.**
+**An autonomous on-chain Solana agent for the OOBE Protocol × Ace Data Cloud bounty.**
 
-OracleCast is a genuine **tool-using agent**: after registering its identity on SAP, an
-**OOBE-powered ReAct loop decides which tools to call** to run a complete `trigger → reason →
-execute → pay` workflow with **no human in the loop** — sensing live Solana activity, getting it
-risk-validated by **Synapse Sentinel**, deciding a Merkle-proofed stance, generating a
-**multimedia market briefing** (text + image + audio) via **Ace Data Cloud** (settled with
-**x402**), and settling subscriber payments via **on-chain escrow** on SAP mainnet — all inside
-**hard per-run budget + tool-allowlist guardrails**.
+OracleCast runs a complete `trigger → reason → execute → pay` workflow with **no human in the loop**:
+a cron fires, an agent loop **decides which tools to call**, it senses live Solana activity over
+**Synapse RPC**, discovers agents on the **Synapse Agent Protocol (SAP)**, calls **Ace Data Cloud**
+AI services, and **pays for every call per request in USDC over x402** — then delivers a market
+briefing with a Merkle-proofed stance. Spending is bounded by hard per-run budget + tool-allowlist
+guardrails.
 
-When no LLM key is configured (or in DRY_RUN), a deterministic planner walks the same tools so the
-workflow always runs end-to-end without funds.
-
-> One genuine product (an autonomous market briefing) produces real volume in **both** reward
-> categories — escrow volume (Category 1) and Ace Data Cloud x402 volume (Category 2) — without
-> wash trading.
+**Submission category: Ace Data Cloud Usage (x402 Facilitator).** The codebase also implements the
+Category-1 path (on-chain escrow + Synapse Sentinel + sell-side settlement); the live deployment
+runs the Category-2 profile.
 
 ---
 
-## The two-sided loop
+## ✅ Live on mainnet
+
+|                 |                                                                                                                                        |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Agent (SAP)     | [`7R1NSA8XgF8zKPsFCJ5nxUV2Uie8W1vD2VpAeq7oNjS9`](https://explorer.oobeprotocol.ai/agents/7R1NSA8XgF8zKPsFCJ5nxUV2Uie8W1vD2VpAeq7oNjS9) |
+| Registration tx | [`2Ffic9E5…R67ZZ`](https://solscan.io/tx/2Ffic9E5F1CntjW6QgFKjkHgNutmAqZYq5DS3MK9wmNH8fAkFyMvfsAuD3EJ42r75cZ29zVgVLfqSjjS6pKR67ZZ)     |
+| Wallet          | [`7SLVqVVE…m51R7N`](https://solscan.io/account/7SLVqVVE9wvjeQ8E3h5Gv4RRZC9JsbmETXbT8Xm51R7N)                                           |
+| x402 payments   | per-request USDC `TransferChecked` to the Ace facilitator — see the wallet's token transfers                                           |
+
+Every briefing run makes **3 distinct Ace Data Cloud calls, each paid via x402 in USDC**, confirmed
+on Solana. The on-chain signatures are recorded in each `out/<id>/receipt.json`.
+
+---
+
+## Workflow
 
 ```
-                ┌──────────────────────── OracleCast agent ────────────────────────┐
-  Subscriber    │                                                                   │
-  (real         │  1. SENSE     Synapse RPC  → live on-chain market signal          │
-   counterparty)│  2. CONTEXT   Ace search   → web context              [x402 $]    │
-      │ escrow  │  3. VALIDATE  Synapse Sentinel (escrow deposit)       [escrow ◎]  │
-      ▼ deposit │  4a.REASON    OOBE SDK → Merkle-proofed market stance [merkle ⊞]  │
-   ┌─────────┐  │  4b.ANALYZE   Ace aichat   → briefing text            [x402 $]    │
-   │ EscrowV2│──┼▶ 5. IMAGE     Ace images   → infographic              [x402 $]    │
-   └─────────┘  │  6. AUDIO     Ace audio (Suno) → narration            [x402 $]    │
-   settle 1 call│  7. SETTLE    settle 1 call on subscriber escrow      [escrow ◎]  │
-                │  8. DELIVER   out/<id>/ : briefing.md + media + receipt.json      │
-                └───────────────────────────────────────────────────────────────────┘
-   ◎ = SOL via SAP escrow (Cat 1)   $ = USDC via Ace x402 (Cat 2)   ⊞ = OOBE Merkle proof
+                 ┌──────────────────────── OracleCast ───────────────────────┐
+  cron / order ─▶│ 1. SENSE     Synapse RPC      → live Solana signal         │
+                 │ 2. CONTEXT   Ace serp/google  → web context     [x402 $]   │
+                 │ 3. REASON    OOBE SDK          → Merkle-proofed stance [⊞]  │
+                 │ 4. ANALYZE   Ace aichat        → briefing text   [x402 $]   │
+                 │ 5. MEDIA     Ace flux (image)  → 3rd x402 service [x402 $]  │
+                 │ 6. DELIVER   out/<id>/ : briefing.md + receipt.json         │
+                 └────────────────────────────────────────────────────────────┘
+   $ = USDC paid per request via the Ace x402 facilitator   ⊞ = OOBE Merkle proof
 ```
 
-- **Sell side (Category 1):** OracleCast is registered on SAP as a provider of the
-  `oracle:briefing` capability. A real subscriber funds an `EscrowV2` toward the agent; each
-  delivered briefing **settles one call** (`settle_calls_v2`). It also **consumes Synapse Sentinel**
-  every run by funding an escrow toward it — satisfying the mandatory Sentinel requirement and
-  generating escrow volume.
-- **Buy side (Category 2):** every briefing consumes **4 distinct Ace Data Cloud services**
-  (`search`, `aichat`, `images`, `audio`) paid per request in USDC through the **AceDataCloud x402
-  facilitator** on Solana — exceeding the 3-distinct-service requirement.
-- **Reasoning core (OOBE Protocol SDK):** the agent's _market stance_ is produced by the
-  [`oobe-protocol`](https://oobe-protocol.gitbook.io/oobe-protocol) SDK via the documented
-  `OobeCore` flow — `new OobeCore(config)` → `start()` → `getAgent()`, then `agent.genAi()` +
-  `agent.getDefaultPersonality()` to reason over a **memory of prior briefings**. Each decision is
-  committed to a Merkle tree (`MerkleTreeManager`) for a verifiable root + proof, and, when a live
-  OobeCore agent is available, inscribed **on-chain** via `agent.merkleValidate()` +
-  `agent.merkle.onChainMerkleInscription()` — making the agent's reasoning auditable, not just its payments.
+The agent loop chooses tools at each step (LLM-driven when an OpenAI key is set; otherwise a
+deterministic planner walks the same tools). The **default Category-2 allowlist** is
+`sense_market, web_search, decide_stance, write_analysis, make_infographic`. Three more tools ship
+and are one allowlist entry away:
+
+- `risk_check_sentinel` — consumes **Synapse Sentinel** via on-chain escrow (Category 1)
+- `make_audio` — Ace Suno audio
+- `settle_payment` — sell-side escrow settlement (Category 1)
 
 ---
 
 ## Quick start
 
+Requires **pnpm** (`corepack enable`, or `npm i -g pnpm`).
+
 ```bash
 pnpm install
-cp .env.example .env          # fill in keys for LIVE; defaults run in DRY_RUN
-pnpm build                 # bundle (esbuild) — required, see "Why a bundler" below
-
-# Fully simulated end-to-end run (no funds, no keys needed):
-pnpm run-once
-
-# Pre-flight against mainnet (reads only):
-pnpm balances
+cp .env.example .env     # defaults run fully simulated (DRY_RUN=1)
+pnpm run-once            # one end-to-end briefing, no funds/keys needed
 ```
 
-Artifacts land in `out/<briefing-id>/`:
+Artifacts land in `out/<briefing-id>/`: `briefing.md` (the report) and `receipt.json` (every
+payment + on-chain signature).
 
-- `briefing.md` — the human-readable report
-- `cover.png` / `briefing.mp3` — generated media (LIVE only)
-- `receipt.json` — full audit trail of every payment + tx signature
+### Commands
 
-### Modes
-
-| Command                     | What it does                                                             |
-| --------------------------- | ------------------------------------------------------------------------ |
-| `pnpm run-once`             | One full autonomous briefing                                             |
-| `pnpm loop`                 | Continuous cron-driven operation (`BRIEFING_CRON`)                       |
-| `pnpm serve`                | HTTP server: `/health`, `/agent`, `POST /briefings`, `/briefings/latest` |
-| `pnpm register`             | Register the agent on SAP (idempotent)                                   |
-| `pnpm fund`                 | Open/fund an escrow (subscriber tool or Sentinel top-up)                 |
-| `pnpm balances`             | Pre-flight: wallet, SOL/USDC, registration, Sentinel resolution          |
-| `pnpm conformance`          | Assert every SDK class/method used exists (36 checks)                    |
-| `pnpm lint` / `pnpm format` | ESLint (typescript-eslint) / Prettier                                    |
-| `pnpm typecheck`            | Strict `tsc --noEmit`                                                    |
+| Command                                        | What it does                                                      |
+| ---------------------------------------------- | ----------------------------------------------------------------- |
+| `pnpm gen-wallet`                              | Generate `wallet.json`; prints the public key to fund             |
+| `pnpm balances`                                | Pre-flight: wallet, SOL/USDC, registration, Sentinel resolution   |
+| `pnpm register`                                | Register the agent on SAP mainnet (idempotent)                    |
+| `pnpm run-once`                                | One full autonomous briefing                                      |
+| `pnpm loop`                                    | Continuous cron-driven operation (`BRIEFING_CRON`)                |
+| `pnpm serve`                                   | HTTP: `/health`, `/agent`, `POST /briefings`, `/briefings/latest` |
+| `pnpm wallet:export`                           | Print the wallet's base58 key (to import into Phantom)            |
+| `pnpm conformance`                             | Assert every SDK class/method used exists (36 checks)             |
+| `pnpm lint` · `pnpm format` · `pnpm typecheck` | ESLint · Prettier · strict `tsc`                                  |
 
 ---
 
-## Going LIVE (real mainnet volume)
+## Going LIVE (real x402 volume)
 
-1. **Wallet** — set `WALLET_PATH` (Solana CLI keypair) or `WALLET_SECRET_KEY`. Fund it with:
-   - **SOL** for tx fees, the ~1 SOL agent stake, and escrow deposits (Category 1 volume).
-   - **USDC (SPL)** for Ace x402 payments (Category 2 volume). The wallet needs a USDC ATA.
-2. **Synapse RPC** — set `SYNAPSE_RPC_URL` to your mainnet endpoint with `?api_key=...`
-   (free tier at <https://synapse.oobeprotocol.ai>).
-3. **Ace Data Cloud** — create an account at <https://platform.acedata.cloud> (Google/GitHub →
-   free credits). x402 needs no API key for pay-per-request; `ACE_API_TOKEN` is an optional fallback.
-4. **Set `DRY_RUN=0`** and:
+1. **Ace Data Cloud** — create an account at <https://platform.acedata.cloud>. Leave
+   `ACE_API_TOKEN` **empty** so calls settle via **x402** (on-chain USDC) rather than free credits.
+2. **Synapse RPC** — free-tier key from <https://synapse.oobeprotocol.ai> → `SYNAPSE_RPC_URL`.
+3. **Wallet** — `pnpm gen-wallet`, then fund the printed address with:
+   - **~0.05 SOL** — registration is a one-time ~0.04 SOL account-rent deposit (recoverable on
+     close), plus negligible per-tx fees. _(No stake is required to register.)_
+   - **USDC (SPL)** — the budget the agent spends on Ace x402 calls (≈ 0.12 USDC per run).
+4. Set `DRY_RUN=0`, then:
    ```bash
-   pnpm balances     # confirm funds + Sentinel resolves
-   pnpm register     # register OracleCast on SAP (one time)
-   pnpm run-once     # one real briefing — check out/<id>/receipt.json for tx signatures
+   pnpm balances     # confirm SOL + USDC, Sentinel resolves
+   pnpm register     # one-time on-chain registration
+   pnpm run-once     # verify: receipt.json shows ace-x402 USDC payments
    pnpm loop         # sustained autonomous volume
    ```
-5. **Subscribers (sell side):** a _second, real_ wallet runs `pnpm fund` with
-   `FUND_TARGET=<OracleCast agentPda>` to subscribe. Set `SUBSCRIBER_PUBKEY` (+ matching
-   `SUBSCRIBER_ESCROW_NONCE`) so the agent settles their calls. Self-funding the same wallet is
-   wash trading and is intentionally **not** done here.
 
-Verify everything on the [Synapse Explorer](https://explorer.oobeprotocol.ai) (agent + escrow
-activity) and the Ace Data Cloud usage dashboard (x402 spend).
+**RPC split (important).** `SYNAPSE_RPC_URL` is used for the read/sense side of execution. The
+free-tier Synapse node can lag and hand out expired blockhashes, so **transaction submission** uses
+`TX_RPC_URL` (defaults to a synced public RPC). Set `TX_RPC_URL` to a reliable endpoint (e.g. a free
+Helius key) for best results.
+
+See [`SUBMISSION.md`](./SUBMISSION.md) for the full go-live runbook + X-post draft, and
+[`DEMO_SCRIPT.md`](./DEMO_SCRIPT.md) for the demo walkthrough.
 
 ---
 
-## Bounty requirement mapping
+## Bounty requirement mapping (Category 2)
 
-| Requirement                                       | Where                                                                              |
-| ------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| Registered on SAP mainnet                         | `SapService.register()` (`AgentModule.registerAgent`)                              |
-| Complete automated workflow (trigger→execute→pay) | `BriefingService` + `OracleAgent` + `Scheduler`                                    |
-| Discovers tools via SAP                           | `SapService.resolveAgent()` (Sentinel)                                             |
-| Escrow payments + Synapse RPC in execution        | `SapService`, `SynapseService`                                                     |
-| ≥1 AI capability                                  | `AceService` + `OobeReasoner` (LLM reasoning)                                      |
-| On-chain agent reasoning + verifiable memory      | `OobeReasoner` + `OobeCoreProvider` (OobeCore agent + on-chain Merkle inscription) |
-| **Uses Synapse Sentinel** (Category 1)            | `SapService.assessWithSentinel()` (escrow toward Sentinel)                         |
-| Ace Data Cloud account + **x402 facilitator**     | `AceService` (`createX402PaymentHandler`)                                          |
-| **≥3 distinct Ace services** (Category 2)         | `search`, `aichat`, `images`, `audio` (4)                                          |
+| Requirement                                       | Where                                                         |
+| ------------------------------------------------- | ------------------------------------------------------------- |
+| Registered on SAP mainnet                         | `SapService.register()` → live PDA above                      |
+| Complete automated workflow (trigger→execute→pay) | `Scheduler` → `OracleAgent` → `BriefingService`               |
+| Discovers tools via SAP                           | `SapService.resolveAgent()` (resolves Synapse Sentinel)       |
+| Ace Data Cloud account + **x402 facilitator**     | `AceService` (`createX402PaymentHandler`, network `solana`)   |
+| **≥3 distinct Ace services**                      | `serp/google`, `aichat`, `flux` images (audio/GLM also wired) |
+| ≥1 AI capability                                  | `AceService` analysis + `OobeReasoner` stance                 |
+| Synapse RPC in execution                          | `SynapseService` (sense/discovery over Synapse RPC)           |
+
+Category-1 extras (escrow volume + Synapse Sentinel + sell-side settle) are implemented in
+`SapService` and exposed as the `risk_check_sentinel` / `settle_payment` tools.
 
 ---
 
 ## Architecture
 
-A dependency-injected, class-per-responsibility design. `OracleCast` (the composition root) wires
-every service; nothing reaches for a global.
+Dependency-injected, class-per-responsibility. `OracleCast` (the composition root) wires everything;
+nothing reaches for a global.
 
 ```
 src/
   oracle-cast.ts            composition root — constructs + wires all classes
   index.ts                  CLI (run-once | loop | serve | register)
   core/
-    config.ts               class Config       validated env + DRY_RUN switch (singleton)
-    logger.ts               class Logger
-    receipt.ts              class Receipt       payment + artifact audit trail
-    solana.ts               class Solana        keypair, RPC connection, x402 wallet adapter
+    config.ts               Config    validated env + DRY_RUN (singleton)
+    logger.ts               Logger
+    receipt.ts              Receipt   payment + artifact audit trail
+    solana.ts               Solana    keypair, tx connection, x402 wallet adapter
   services/
-    synapse.service.ts      class SynapseService  Synapse RPC → MarketSignal
-    ace.service.ts          class AceService      AceDataCloud SDK + x402 (chat/search/image/audio)
-    sap.service.ts          class SapService      register / Sentinel escrow / settle (SapClient)
+    synapse.service.ts      SynapseService  Synapse RPC → MarketSignal (synced fallback for metrics)
+    ace.service.ts          AceService      AceDataCloud SDK + x402 (search/chat/image/audio/GLM)
+    sap.service.ts          SapService      register / Sentinel escrow / settle (SapClient)
   reasoning/
-    oobe-core.provider.ts   class OobeCoreProvider  documented OobeCore (start/getAgent/genAi)
-    oobe.reasoner.ts        class OobeReasoner      stance + Merkle proof + on-chain inscription
+    oobe-core.provider.ts   OobeCoreProvider  documented OobeCore (start/getAgent/genAi)
+    oobe.reasoner.ts        OobeReasoner      stance + Merkle proof + on-chain inscription
   agent/
-    tool.ts                 abstract class AgentTool + RunState
+    tool.ts                 AgentTool (abstract) + RunState
     tools.ts                concrete tool classes (one per capability)
-    budget.ts               class Budget          hard SOL/USDC caps + allowlist
-    oracle-agent.ts         class OracleAgent     ReAct loop (LLM-driven or planner)
+    budget.ts               Budget    hard SOL/USDC caps + allowlist
+    oracle-agent.ts         OracleAgent  ReAct loop (LLM-driven or deterministic planner)
   pipeline/
-    briefing.service.ts     class BriefingService orchestrate run + deliver bundle
+    briefing.service.ts     BriefingService  orchestrate run + deliver bundle
   runtime/
-    scheduler.ts            class Scheduler       cron trigger
-    server.ts               class HttpServer      orders + latest briefing
+    scheduler.ts            Scheduler   cron trigger
+    server.ts               HttpServer  orders + latest briefing
 ```
 
-### SDK usage notes
+### SDK usage
 
-- **Ace Data Cloud / Synapse** are used via their own classes as documented — `new AceDataCloud({ paymentHandler })`, `new SynapseClient({ endpoint })`.
-- **SAP** uses the published `synapse-sap-sdk` (`new SapClient`, `AgentModule.registerAgent`, and the exposed Anchor `program` for escrow/settle). The higher-level `SapConnection`/`client.agent.register` API shown in the SAP docs is **not present in the published `0.19.8`**, so OracleCast targets the shipped surface.
-- **OOBE** is used via the documented `OobeCore` class flow (`new OobeCore(config)` → `start()` →
-  `getAgent()` → `genAi()` / `getDefaultPersonality()` / `merkleValidate()` /
-  `merkle.onChainMerkleInscription()`), plus `MerkleTreeManager` for the off-chain proof.
+- **Ace Data Cloud / Synapse** — used via their own classes as documented:
+  `new AceDataCloud({ paymentHandler })`, `new SynapseClient({ endpoint })`.
+- **x402** — `createX402PaymentHandler({ network: "solana", solanaWallet })` from
+  `@acedatacloud/x402-client`; the wallet adapter signs the USDC `TransferChecked` and submits it.
+- **SAP** — the published `synapse-sap-sdk`: `new SapClient`, `AgentModule.registerAgent`, and the
+  exposed Anchor `program` for escrow/settle. (The higher-level `SapConnection`/`client.agent.register`
+  shown in the docs is **not in the published `0.19.8`**, so OracleCast targets the shipped surface.)
+- **OOBE** — the documented `OobeCore` flow (`new OobeCore` → `start` → `getAgent` → `genAi` /
+  `getDefaultPersonality` / `merkleValidate` / `merkle.onChainMerkleInscription`), plus
+  `MerkleTreeManager` for the off-chain proof. `pnpm conformance` asserts all of these exist.
 
-> **Why pnpm.** OOBE's barrel transitively imports `@orca-so/whirlpools-sdk@0.13.x`, which pins
-> `@coral-xyz/anchor ~0.29.0` as a _peer_ and ships a pre-0.30 IDL. Under Anchor 0.31 (needed by
-> SAP), its `BorshAccountsCoder` throws `Account not found: AdaptiveFeeTier`. npm flat-hoists
-> whirlpools and forces it onto the top-level anchor 0.31, so the crash is unavoidable on npm.
-> **pnpm** isolates dependencies, and the `pnpm.overrides` entry
-> `"@orca-so/whirlpools-sdk>@coral-xyz/anchor": "0.29.0"` gives whirlpools its own anchor 0.29
-> while SAP keeps 0.31 — reproducibly, with no `node_modules` patching. **Install with `pnpm`.**
+> **Why pnpm.** OOBE transitively imports `@orca-so/whirlpools-sdk@0.13.x`, which pins
+> `@coral-xyz/anchor ~0.29.0` as a _peer_ and ships a pre-0.30 IDL that Anchor 0.31 (needed by SAP)
+> rejects with `Account not found: AdaptiveFeeTier`. npm flat-hoists whirlpools onto anchor 0.31, so
+> it crashes. The `pnpm.overrides` entry `"@orca-so/whirlpools-sdk>@coral-xyz/anchor": "0.29.0"`
+> gives whirlpools its own anchor 0.29 while SAP keeps 0.31 — reproducibly, no `node_modules` patching.
 
-### Why a bundler (esbuild)?
+> **Why a bundler.** `synapse-sap-sdk`'s ESM build has extensionless imports + a re-export cycle that
+> Node's loader rejects, and `x402-client` lazily imports `ethers`. `pnpm build` bundles each entry
+> with esbuild (CJS; `ethers` + `oobe-protocol` external), flattening the cycle. Run scripts build first.
 
-The `@oobe-protocol-labs/synapse-sap-sdk` ESM build uses extensionless imports and a re-export
-cycle that Node's strict ESM loader rejects, and `@acedatacloud/x402-client` lazily imports
-`ethers` (EVM-only). `pnpm build` bundles each entrypoint with esbuild (CJS); `ethers` and
-`oobe-protocol` are marked external (required at runtime from pnpm's store), and the SAP cycle is
-flattened. All run scripts build first automatically.
+---
+
+## Honest limitations
+
+- **Image / audio / video deliverables.** The agent calls and **pays for** image (flux) as its 3rd
+  x402 service, and the Suno-audio and GLM tools are wired too. But Ace's media services are async
+  and **bill x402 on every status-poll** while the job renders — on a small budget that drains funds
+  fast — so the live profile submits + pays once and does not poll for the finished media. The
+  integration is complete; with more runway OracleCast would ship full multimedia briefings.
+- **Synapse free-tier node** lagged during testing, hence the read/tx RPC split above.
 
 ---
 
 ## Safety & legitimacy
 
-- **Agentic guardrails.** The LLM may _choose_ actions, but it cannot overspend: every paid tool
-  is gated by hard per-run caps (`RUN_BUDGET_LAMPORTS`, `RUN_BUDGET_USDC`), an optional
-  `AGENT_TOOL_ALLOWLIST`, and `AGENT_MAX_STEPS`. A tool that would breach a cap is refused _before_
-  any chain/payment call, and the agent adapts. Settlement amounts are fixed by config, not the LLM.
-- **`DRY_RUN=1` (default)** simulates all chain writes and Ace payments — the full pipeline,
-  receipts, and artifacts work with zero funds or keys. On-chain **reads** are always real.
-- Volume is real product activity: Ace x402 spend and Sentinel consumption have genuine
-  third-party counterparties; the subscriber path is counterparty-driven by design.
-- The cron cadence (`BRIEFING_CRON`, default every 30 min) reflects a realistic content schedule,
-  not a tight artificial loop.
+- **Guardrails.** The LLM may _choose_ actions but cannot overspend: every paid tool is gated by
+  hard per-run caps (`RUN_BUDGET_USDC`, `RUN_BUDGET_LAMPORTS`), a tool allowlist, and `AGENT_MAX_STEPS`.
+  A tool that would breach a cap is refused _before_ any payment.
+- **`DRY_RUN=1` (default)** simulates all chain writes + Ace payments; on-chain reads stay real.
+- **Real activity, not wash trading.** Each x402 payment buys a genuine Ace AI result from a
+  third-party facilitator; the cron cadence is a realistic content schedule.
+- **Secrets** (`.env`, `wallet.json`) are gitignored and never committed.
