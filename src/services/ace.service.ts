@@ -134,11 +134,13 @@ export class AceService {
       this.simulate(receipt, "image", "images.generate (infographic)");
       return undefined;
     }
+    // wait:false => submit + pay the x402 charge ONCE; do not poll the task
+    // endpoint (Ace charges x402 on every poll, which drains the budget).
     const res = await this.sdk(receipt).images.generate({
       prompt,
       provider: "flux",
-      wait: true,
-      maxWait: 120_000,
+      size: "1024x1024",
+      wait: false,
     });
     return AceService.firstUrl((res as any)?.result ?? res);
   }
@@ -148,12 +150,13 @@ export class AceService {
       this.simulate(receipt, "audio", "audio.generate (Suno)");
       return undefined;
     }
+    // wait:false => one x402 charge for the submission; never poll suno/tasks
+    // (each poll is x402-charged and would drain the budget in a loop).
     const res = await this.sdk(receipt).audio.generate({
       prompt,
       provider: "suno",
       tags: "ambient, news, electronic",
-      wait: true,
-      maxWait: 180_000,
+      wait: false,
     });
     return AceService.firstUrl((res as any)?.result ?? res);
   }
