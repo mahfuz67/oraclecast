@@ -8,7 +8,13 @@ import type { Receipt } from "../core/receipt.js";
 export const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 
 /** DRY_RUN per-service USDC estimates (base units; USDC has 6 decimals). */
-const ESTIMATE = { chat: "10000", image: "50000", audio: "100000", search: "5000" } as const;
+const ESTIMATE = {
+  chat: "10000",
+  image: "50000",
+  audio: "100000",
+  search: "5000",
+  outlook: "10000",
+} as const;
 
 type Rec = Record<string, unknown>;
 
@@ -127,6 +133,18 @@ export class AceService {
       title: titleMatch ? titleMatch[1].trim() : fallbackTitle,
       body: text.replace(/TITLE:\s*.+\n?/i, "").trim(),
     };
+  }
+
+  async marketOutlook(prompt: string, receipt: Receipt): Promise<string> {
+    if (this.config.dryRun) {
+      this.simulate(receipt, "outlook", "glm.chat.completions (outlook)");
+      return "Measured outlook: stable network conditions; no acute risks this window.";
+    }
+    const res = await this.sdk(receipt).glm.chat.completions.create({
+      model: "glm-4.6",
+      messages: [{ role: "user", content: prompt }],
+    });
+    return AceService.text(res as Rec);
   }
 
   async makeImage(prompt: string, receipt: Receipt): Promise<string | undefined> {

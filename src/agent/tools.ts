@@ -104,6 +104,27 @@ export class AnalysisTool extends AgentTool {
   }
 }
 
+export class MarketOutlookTool extends AgentTool {
+  readonly name = "market_outlook";
+  readonly description =
+    "Generate a short forward outlook via a second, distinct LLM (Ace GLM, x402-paid). Requires sense_market.";
+  readonly args = "{}";
+  constructor(private readonly ace: AceService) {
+    super();
+  }
+  cost(): ToolCost {
+    return usdc(10_000n);
+  }
+  async execute(_args: Record<string, unknown>, { state, receipt }: ToolContext): Promise<string> {
+    if (!state.signal) return "error: call sense_market first";
+    const prompt =
+      `In <=40 words, give a forward market outlook + the single biggest risk for Solana right now.\n` +
+      `SIGNAL: ${JSON.stringify(state.signal)}\nCONTEXT: ${(state.context ?? "").slice(0, 600)}`;
+    state.outlook = await this.ace.marketOutlook(prompt, receipt);
+    return `outlook: ${state.outlook.slice(0, 80)}`;
+  }
+}
+
 export class InfographicTool extends AgentTool {
   readonly name = "make_infographic";
   readonly description =

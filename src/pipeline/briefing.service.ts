@@ -16,6 +16,7 @@ export interface Briefing {
   signal: MarketSignal;
   risk: RiskAssessment;
   stance: OracleStance;
+  outlook?: string;
   imageUrl?: string;
   audioUrl?: string;
   agent: string;
@@ -65,6 +66,7 @@ export class BriefingService {
       signal,
       risk,
       stance,
+      outlook: state.outlook,
       imageUrl: state.imageUrl,
       audioUrl: state.audioUrl,
       agent: agentPda,
@@ -164,7 +166,7 @@ export class BriefingService {
 ## Market analysis
 
 ${b.body}
-
+${b.outlook ? `\n## Outlook (GLM)\n\n${b.outlook}\n` : ""}
 ## On-chain signal
 
 - Slot: ${b.signal.slot}

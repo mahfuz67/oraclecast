@@ -12,6 +12,7 @@ export interface RunState {
   risk?: RiskAssessment;
   stance?: OracleStance;
   analysis?: Analysis;
+  outlook?: string;
   imageUrl?: string;
   audioUrl?: string;
   settlement?: SettleResult;
