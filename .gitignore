@@ -1,0 +1,17 @@
+# dependencies / build output
+node_modules/
+dist/
+out/
+
+# secrets — NEVER commit
+.env
+.env.*
+!.env.example
+wallet.json
+*.keypair.json
+*.pem
+*.key
+
+# misc
+*.log
+.DS_Store

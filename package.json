@@ -1,0 +1,60 @@
+{
+  "name": "oraclecast",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "OracleCast — autonomous on-chain multimedia briefing agent on Solana (SAP + Ace Data Cloud + x402).",
+  "engines": {
+    "node": ">=18"
+  },
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "esbuild src/index.ts scripts/register-agent.ts scripts/check-balances.ts scripts/fund-escrow.ts --bundle --platform=node --format=cjs --target=node20 --outdir=dist --outbase=. --out-extension:.js=.cjs --external:ethers --external:oobe-protocol --log-level=warning",
+    "start": "node dist/src/index.cjs",
+    "gen-wallet": "tsx scripts/gen-wallet.ts",
+    "wallet:export": "tsx scripts/wallet-export.ts",
+    "register": "pnpm build && node dist/scripts/register-agent.cjs",
+    "fund": "pnpm build && node dist/scripts/fund-escrow.cjs",
+    "balances": "pnpm build && node dist/scripts/check-balances.cjs",
+    "run-once": "pnpm build && node dist/src/index.cjs run-once",
+    "loop": "pnpm build && node dist/src/index.cjs loop",
+    "serve": "pnpm build && node dist/src/index.cjs serve",
+    "conformance": "esbuild scripts/conformance.ts --bundle --platform=node --format=cjs --target=node20 --outfile=dist/conformance.cjs --external:ethers --external:oobe-protocol --log-level=warning && node dist/conformance.cjs",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "dev": "pnpm run-once"
+  },
+  "dependencies": {
+    "@acedatacloud/sdk": "^2026.504.2",
+    "@acedatacloud/x402-client": "^2026.531.5",
+    "@coral-xyz/anchor": "^0.31.1",
+    "@oobe-protocol-labs/synapse-client-sdk": "^2.0.6",
+    "@oobe-protocol-labs/synapse-sap-sdk": "^0.19.8",
+    "@solana/web3.js": "^1.98.0",
+    "bs58": "^6.0.0",
+    "dotenv": "^16.4.5",
+    "node-cron": "^3.0.3",
+    "oobe-protocol": "^2.0.3",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.17.0",
+    "@types/node": "^22.0.0",
+    "@types/node-cron": "^3.0.11",
+    "esbuild": "^0.24.0",
+    "eslint": "^9.17.0",
+    "eslint-config-prettier": "^9.1.0",
+    "prettier": "^3.4.2",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "typescript-eslint": "^8.18.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "@orca-so/whirlpools-sdk>@coral-xyz/anchor": "0.29.0"
+    }
+  }
+}
